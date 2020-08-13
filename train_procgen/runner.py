@@ -35,6 +35,7 @@ class Runner(AbstractEnvRunner):
                 'rotate':rad.Rand_Rotate,
                 'color_jitter':rad.ColorJitterLayer,
                 'crop':rad.Rand_Crop,
+                'noise2net':rad.Noise2Net
                 }
             self.augs_funcs = aug_to_func[data_aug](batch_size=nenvs, p_gray=0.8)
             self.obs = self.augs_funcs.do_augmentation(self.obs)

@@ -86,9 +86,9 @@ def main():
 
     logger.info("creating tf session")
     setup_mpi_gpus()
-    config = tf.ConfigProto()
+    config = tf.compat.v1.ConfigProto()
     config.gpu_options.allow_growth = True #pylint: disable=E1101
-    sess = tf.Session(config=config)
+    sess = tf.compat.v1.Session(config=config)
     sess.__enter__()
 
     conv_fn = lambda x: build_impala_cnn(x, depths=[16,32,32], emb_size=256)
