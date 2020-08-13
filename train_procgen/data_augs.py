@@ -56,6 +56,8 @@ class Noise2Net(object):
     def do_augmentation(self, imgs):
         global C
 
+        to_save = random.random() < 0.1
+
         # images: [B, C, H, W]
         net = ResNet(epsilon=0.3).to(device=torch.device('cuda:1'))
 
@@ -63,16 +65,18 @@ class Noise2Net(object):
         inputs = torch.from_numpy(imgs).to(device=torch.device('cuda:1')).float()
         inputs = inputs / 255.0
 
-        # print("noise2net input", inputs.shape, torch.max(inputs), torch.min(inputs))
-        # torchvision.utils.save_image(inputs[:10].clone().detach(), f"inputs_noise2net_{C}.png")
+        if to_save:
+            # print("noise2net input", inputs.shape, torch.max(inputs), torch.min(inputs))
+            torchvision.utils.save_image(inputs[:10].clone().detach(), f"inputs_noise2net.png")
         
         with torch.no_grad():
             inputs = normalize_fn(inputs)
             outputs = net(inputs)
             outputs = unnorm_fn(outputs).clamp(0, 1)
         
-        # torchvision.utils.save_image(outputs[:10].clone().detach(), f"outputs_noise2net_{C}.png")
-        # print("noise2net output", outputs.shape)
+        if to_save:
+            torchvision.utils.save_image(outputs[:10].clone().detach(), f"outputs_noise2net.png")
+            # print("noise2net output", outputs.shape)
 
         # C = C + 1
         # if C > 5:
