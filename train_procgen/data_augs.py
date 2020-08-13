@@ -9,20 +9,75 @@ import time
 from skimage.util.shape import view_as_windows
 from skimage.transform import resize
 
+import torchvision
+
+class Normalize(object):
+    def __init__(self, mean, std):
+        self.mean = mean
+        self.std = std
+
+    def __call__(self, tensor):
+        # The normalize code -> t.sub_(m).div_(s)
+        new_tensor = torch.zeros_like(tensor)
+        for i, m, s in zip(range(3), self.mean, self.std):
+            new_tensor[:, i] = (tensor[:, i] - m) / s
+        return new_tensor
+
+# Useful for undoing thetorchvision.transforms.Normalize() 
+# From https://discuss.pytorch.org/t/simple-way-to-inverse-transform-normalization/4821
+class UnNormalize(object):
+    def __init__(self, mean, std):
+        self.mean = mean
+        self.std = std
+
+    def __call__(self, tensor):
+        # The normalize code -> t.sub_(m).div_(s)
+        new_tensor = torch.zeros_like(tensor)
+        for i, m, s in zip(range(3), self.mean, self.std):
+            new_tensor[:, i] = (tensor[:, i] * s) + m
+        return new_tensor
+
+unnorm_fn = UnNormalize(
+    mean=[0.485, 0.456, 0.406],
+    std=[0.229, 0.224, 0.225]
+)
+
+normalize_fn = Normalize(
+    mean=[0.485, 0.456, 0.406],
+    std=[0.229, 0.224, 0.225]
+)
+
+C = 0
+
 class Noise2Net(object):
     def __init__(self, batch_size, *_args, **_kwargs):
         self.batch_size = batch_size
     
     def do_augmentation(self, imgs):
+        global C
+
         # images: [B, C, H, W]
-        net = ResNet(epsilon=1).to(device=torch.device('cuda:1'))
+        net = ResNet(epsilon=0.3).to(device=torch.device('cuda:1'))
 
         imgs = np.transpose(imgs, (0, 3, 2, 1))
         inputs = torch.from_numpy(imgs).to(device=torch.device('cuda:1')).float()
         inputs = inputs / 255.0
 
+        # print("noise2net input", inputs.shape, torch.max(inputs), torch.min(inputs))
+        # torchvision.utils.save_image(inputs[:10].clone().detach(), f"inputs_noise2net_{C}.png")
+        
         with torch.no_grad():
+            inputs = normalize_fn(inputs)
             outputs = net(inputs)
+            outputs = unnorm_fn(outputs).clamp(0, 1)
+        
+        # torchvision.utils.save_image(outputs[:10].clone().detach(), f"outputs_noise2net_{C}.png")
+        # print("noise2net output", outputs.shape)
+
+        # C = C + 1
+        # if C > 5:
+        #     exit()
+
         outputs = outputs.data.cpu().numpy() * 255.0
         outputs = np.transpose(outputs, (0, 3, 2, 1))
         return outputs
@@ -307,7 +362,7 @@ class ColorJitterLayer(nn.Module):
         self.batch_size = batch_size
         self.stack_size = stack_size
         self._device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-#         self._device = torch.device('cpu')
+        # self._device = torch.device('cpu')
     
         # random paramters
         factor_contrast = torch.empty(self.batch_size, device=self._device).uniform_(*self.contrast)
