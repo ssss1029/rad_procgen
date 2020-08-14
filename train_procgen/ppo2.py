@@ -94,9 +94,12 @@ def learn(*, network, env, total_timesteps, eval_env = None,
     ob_space = env.observation_space
     ac_space = env.action_space
 
+    # ob_space = Box(64, 64, 3), ac_space = Discrete(15)
+    # print(f"ob_space = {ob_space}, ac_space = {ac_space}")
+
     # Calculate the batch_size
-    nbatch = nenvs * nsteps
-    nbatch_train = nbatch // nminibatches
+    nbatch = nenvs * nsteps # 256 * 64
+    nbatch_train = nbatch // nminibatches # 256 * 64 / 8
     is_mpi_root = (MPI is None or MPI.COMM_WORLD.Get_rank() == 0)
 
     # Instantiate the model object (that creates act_model and train_model)
@@ -160,6 +163,9 @@ def learn(*, network, env, total_timesteps, eval_env = None,
         if eval_env is not None:
             eval_obs, eval_returns, eval_masks, eval_actions, eval_values, eval_neglogpacs, eval_states, eval_epinfos = eval_runner.run() #pylint: disable=E0632
         if update % log_interval == 0 and is_mpi_root: logger.info('Done.')
+
+        # obs = (16384, 64, 64, 3), since n_steps = 256, num_envs = 64
+        print(f"obs = {obs.shape}") 
 
         epinfobuf.extend(epinfos)
         if eval_env is not None:

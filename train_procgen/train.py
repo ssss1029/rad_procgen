@@ -2,7 +2,7 @@ import tensorflow as tf
 from train_procgen import ppo2
 from baselines.common.models import build_impala_cnn
 from baselines.common.mpi_util import setup_mpi_gpus
-from import ProcgenEnv
+from procgen import ProcgenEnv
 from baselines.common.vec_env import (
     VecExtractDictObs,
     VecMonitor,
@@ -44,6 +44,7 @@ def main():
 
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
+    print(f"Rank = {rank}")
 
     is_test_worker = False
     

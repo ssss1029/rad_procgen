@@ -10,6 +10,9 @@ from skimage.util.shape import view_as_windows
 from skimage.transform import resize
 
 import torchvision
+from PIL import Image
+
+import torch.multiprocessing as mp
 
 class Normalize(object):
     def __init__(self, mean, std):
@@ -47,44 +50,49 @@ normalize_fn = Normalize(
     std=[0.229, 0.224, 0.225]
 )
 
-C = 0
+def apply_network(input, net):
+    pass
 
 class Noise2Net(object):
     def __init__(self, batch_size, *_args, **_kwargs):
         self.batch_size = batch_size
     
     def do_augmentation(self, imgs):
-        global C
-
-        to_save = random.random() < 0.1
+        result_images = []
 
         # images: [B, C, H, W]
-        net = ResNet(epsilon=0.3).to(device=torch.device('cuda:1'))
-
-        imgs = np.transpose(imgs, (0, 3, 2, 1))
-        inputs = torch.from_numpy(imgs).to(device=torch.device('cuda:1')).float()
-        inputs = inputs / 255.0
-
-        if to_save:
-            # print("noise2net input", inputs.shape, torch.max(inputs), torch.min(inputs))
-            torchvision.utils.save_image(inputs[:10].clone().detach(), f"inputs_noise2net.png")
+        inputs = np.transpose(imgs, (0, 3, 2, 1))
+        inputs = torch.from_numpy(inputs).to(device=torch.device('cuda:1')).float() / 255.0
         
-        with torch.no_grad():
-            inputs = normalize_fn(inputs)
-            outputs = net(inputs)
-            outputs = unnorm_fn(outputs).clamp(0, 1)
-        
-        if to_save:
-            torchvision.utils.save_image(outputs[:10].clone().detach(), f"outputs_noise2net.png")
-            # print("noise2net output", outputs.shape)
+        net = ResNet(epsilon=0.75).to(device=torch.device('cuda:1'))
+        for img in inputs:
+            if random.random() < 0.05:
+                net = ResNet(epsilon=0.75).to(device=torch.device('cuda:1'))
+            
+            with torch.no_grad():
+                if random.random() < 1.0:
+                    img = normalize_fn(img.unsqueeze(0))
+                    output = net(img)
+                    output = unnorm_fn(output).clamp(0, 1)
+                else:
+                    output = img.unsqueeze(0)
+            
+            result_images.append(output)
 
-        # C = C + 1
-        # if C > 5:
-        #     exit()
-
+        outputs = torch.cat(result_images, dim=0)
         outputs = outputs.data.cpu().numpy() * 255.0
         outputs = np.transpose(outputs, (0, 3, 2, 1))
+
+        assert outputs.shape == imgs.shape
+
+        if random.random() < 0.1:
+            I = imgs.copy().astype(np.uint8)[0]
+            O = outputs.copy().astype(np.uint8)[0]
+            Image.fromarray(I, 'RGB').save("all_inputs_noise2net.png")
+            Image.fromarray(O, 'RGB').save("all_outputs_noise2net.png")
+        
         return outputs
+
 
     def change_randomization_params(self, *_args, **_kwargs):
         pass
@@ -673,7 +681,7 @@ class Bottle2neck(nn.Module):
         return out
 
 class ResNet(torch.nn.Module):
-    def __init__(self, epsilon=0.2, hidden_planes=24):
+    def __init__(self, epsilon=0.2, hidden_planes=2):
         super(ResNet, self).__init__()
         
         self.epsilon = epsilon
@@ -681,8 +689,8 @@ class ResNet(torch.nn.Module):
                 
         self.block1 = Bottle2neck(3, 3, hidden_planes=hidden_planes)
         self.block2 = Bottle2neck(3, 3, hidden_planes=hidden_planes)
-        self.block3 = Bottle2neck(3, 3, hidden_planes=hidden_planes)
-        self.block4 = Bottle2neck(3, 3, hidden_planes=hidden_planes)
+        # self.block3 = Bottle2neck(3, 3, hidden_planes=hidden_planes)
+        # self.block4 = Bottle2neck(3, 3, hidden_planes=hidden_planes)
         # self.block5 = Bottle2neck(3, 3, hidden_planes=hidden_planes)
         # self.block6 = Bottle2neck(3, 3, hidden_planes=hidden_planes)
     
@@ -690,8 +698,8 @@ class ResNet(torch.nn.Module):
                 
         x = (self.block1(x) * self.epsilon) + x
         x = (self.block2(x) * self.epsilon) + x
-        x = (self.block3(x) * self.epsilon) + x
-        x = (self.block4(x) * self.epsilon) + x
+        # x = (self.block3(x) * self.epsilon) + x
+        # x = (self.block4(x) * self.epsilon) + x
         
         # if random.random() < 0.5:
         #     x = (self.block5(x) * self.epsilon) + x
@@ -703,11 +711,11 @@ class ResNet(torch.nn.Module):
 
     def forward_randorder(self, x):
         
-        num_splits = random.choice([2, 3, 6])
+        num_splits = random.choice([2, 1])
         # print("num_splits = ", num_splits)
         per_split = 6 / num_splits
         # blocks = [self.block1, self.block2, self.block3, self.block4, self.block5, self.block6]
-        blocks = [self.block1, self.block2, self.block3, self.block4]
+        blocks = [self.block1, self.block2]
         random.shuffle(blocks)
         
         split_blocks = [blocks[int(round(per_split * i)): int(round(per_split * (i + 1)))] for i in range(num_splits)]
@@ -751,13 +759,11 @@ class ResNet(torch.nn.Module):
     def forward(self, x):
         funcs = [
             self.forward_original,
-            self.forward_multisplit,
-            self.forward_randorder
+            # self.forward_multisplit,
+            # self.forward_randorder
         ]
         
         random.shuffle(funcs)
         
         F1 = funcs[0]
-        F2 = funcs[1]
-        F3 = funcs[2]
         return F1(x)
